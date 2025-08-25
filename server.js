@@ -35,6 +35,7 @@ const EVOLUTION_CONFIG = {
 };
 
 console.log('🔧 Evolution API Config:', EVOLUTION_CONFIG);
+console.log('📱 QR Code generation with image conversion enabled');
 
 // ================================
 // ALMACENAMIENTO EN MEMORIA
