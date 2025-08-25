@@ -281,7 +281,7 @@
                     
                     <div class="qr-container" id="qr-container-${instance.instance_number}">
                         ${instance.qr_code 
-                            ? `<img src="data:image/png;base64,${instance.qr_code}" class="qr-code" alt="QR Code">` 
+                            ? `<img src="${instance.qr_code.startsWith('data:') ? instance.qr_code : 'data:image/png;base64,' + instance.qr_code}" class="qr-code" alt="QR Code" style="max-width: 200px; max-height: 200px;">` 
                             : '<p>Haz clic en "Generar QR" para conectar</p>'
                         }
                     </div>
@@ -318,9 +318,13 @@
                 const result = await response.json();
                 
                 if (result.success && result.qrCode) {
-                    // Mostrar QR code
+                    // Mostrar QR code - manejar diferentes formatos
+                    const qrSrc = result.qrCode.startsWith('data:') 
+                        ? result.qrCode 
+                        : `data:image/png;base64,${result.qrCode}`;
+                    
                     qrContainer.innerHTML = `
-                        <img src="data:image/png;base64,${result.qrCode}" class="qr-code" alt="QR Code">
+                        <img src="${qrSrc}" class="qr-code" alt="QR Code" style="max-width: 200px; max-height: 200px; border: 1px solid #ddd; padding: 10px; background: white;">
                     `;
                     
                     btn.innerHTML = '📱 Escanea el QR con WhatsApp';
