@@ -4,6 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 require('dotenv').config();
@@ -39,6 +40,13 @@ console.log('🔧 Evolution API Config:', EVOLUTION_CONFIG);
 // ================================
 // BASE DE DATOS SIMPLE
 // ================================
+
+// Crear directorio database si no existe
+const databaseDir = './database';
+if (!fs.existsSync(databaseDir)) {
+    fs.mkdirSync(databaseDir, { recursive: true });
+    console.log('📁 Database directory created');
+}
 
 const db = new sqlite3.Database('./database/platform.db');
 
