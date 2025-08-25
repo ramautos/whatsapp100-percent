@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Dashboard - GHL Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .location-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .instance-card {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .instance-card:hover {
+            border-color: #25d366;
+            box-shadow: 0 5px 15px rgba(37, 211, 102, 0.2);
+        }
+        
+        .instance-card.connected {
+            border-color: #25d366;
+            background: #f8fff9;
+        }
+        
+        .instance-card.connecting {
+            border-color: #ffc107;
+            background: #fffdf5;
+        }
+        
+        .instance-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .instance-header h3 {
+            margin: 0 10px;
+            color: #333;
+        }
+        
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-created {
+            background: #e9ecef;
+            color: #6c757d;
+        }
+        
+        .status-qr_ready {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .qr-container {
+            margin: 20px 0;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .qr-code {
+            max-width: 200px;
+            max-height: 200px;
+        }
+        
+        .btn {
+            background: #25d366;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #1ea952;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .footer {
+            text-align: center;
+            color: #6c757d;
+            margin-top: 30px;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 WhatsApp Dashboard</h1>
+            <p>Conecta hasta 5 números de WhatsApp para usar en GoHighLevel</p>
+        </div>
+        
+        <div class="location-info">
+            <h3 id="companyName">Cargando información...</h3>
+            <p>Location ID: <span id="locationId"></span></p>
+        </div>
+        
+        <div class="instances-grid" id="instancesGrid">
+            <!-- Las instancias se cargarán aquí -->
+        </div>
+        
+        <div class="footer">
+            <p>🔗 WhatsApp-GHL Multi-tenant Platform V2</p>
+        </div>
+    </div>
+
+    <script>
+        // Obtener locationId de la URL
+        const locationId = window.location.pathname.split('/dashboard/')[1];
+        
+        if (!locationId) {
+            alert('Location ID no encontrado en la URL');
+        }
+        
+        document.getElementById('locationId').textContent = locationId;
+        
+        // Función para cargar instancias
+        async function loadInstances() {
+            try {
+                const response = await fetch(`/api/instances/${locationId}`);
+                const data = await response.json();
+                
+                if (data.instances) {
+                    renderInstances(data.instances);
+                } else {
+                    // Si no hay instancias, crear cliente
+                    await registerClient();
+                }
+                
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                document.getElementById('instancesGrid').innerHTML = 
+                    '<div class="error-message">Error al cargar instancias: ' + error.message + '</div>';
+            }
+        }
+        
+        // Función para registrar cliente
+        async function registerClient() {
+            try {
+                console.log('Registering client:', locationId);
+                
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        locationId: locationId,
+                        companyName: `Cliente ${locationId}`,
+                        email: 'cliente@empresa.com'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('Client registered successfully');
+                    // Recargar instancias
+                    setTimeout(loadInstances, 2000);
+                } else {
+                    throw new Error(result.error || 'Error en registro');
+                }
+                
+            } catch (error) {
+                console.error('Error registering client:', error);
+                document.getElementById('instancesGrid').innerHTML = 
+                    '<div class="error-message">Error al registrar cliente: ' + error.message + '</div>';
+            }
+        }
+        
+        // Función para renderizar instancias
+        function renderInstances(instances) {
+            const grid = document.getElementById('instancesGrid');
+            
+            if (instances.length === 0) {
+                grid.innerHTML = '<p>No hay instancias disponibles. Registrando cliente...</p>';
+                registerClient();
+                return;
+            }
+            
+            grid.innerHTML = instances.map(instance => `
+                <div class="instance-card ${instance.status}" id="instance-${instance.instance_number}">
+                    <div class="instance-header">
+                        <h3>📱 WhatsApp #${instance.instance_number}</h3>
+                        <span class="status-badge status-${instance.status}">${instance.status}</span>
+                    </div>
+                    
+                    <div class="qr-container" id="qr-container-${instance.instance_number}">
+                        ${instance.qr_code 
+                            ? `<img src="data:image/png;base64,${instance.qr_code}" class="qr-code" alt="QR Code">` 
+                            : '<p>Haz clic en "Generar QR" para conectar</p>'
+                        }
+                    </div>
+                    
+                    <button class="btn" onclick="generateQR(${instance.instance_number})" 
+                            id="btn-${instance.instance_number}"
+                            ${instance.status === 'connected' ? 'disabled' : ''}>
+                        ${instance.status === 'connected' ? '✅ Conectado' : '🔗 Generar QR'}
+                    </button>
+                    
+                    ${instance.phone_number ? `<p>📞 ${instance.phone_number}</p>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        // Función para generar QR code
+        async function generateQR(instanceNumber) {
+            try {
+                const btn = document.getElementById(`btn-${instanceNumber}`);
+                const qrContainer = document.getElementById(`qr-container-${instanceNumber}`);
+                
+                // Mostrar loading
+                btn.innerHTML = '<span class="loading"></span> Generando...';
+                btn.disabled = true;
+                qrContainer.innerHTML = '<p>Generando QR code...</p>';
+                
+                const response = await fetch(`/api/instances/${locationId}/${instanceNumber}/qr`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.qrCode) {
+                    // Mostrar QR code
+                    qrContainer.innerHTML = `
+                        <img src="data:image/png;base64,${result.qrCode}" class="qr-code" alt="QR Code">
+                    `;
+                    
+                    btn.innerHTML = '📱 Escanea el QR con WhatsApp';
+                    
+                    // Marcar como qr_ready
+                    const instanceCard = document.getElementById(`instance-${instanceNumber}`);
+                    instanceCard.className = 'instance-card qr_ready';
+                    
+                } else {
+                    throw new Error(result.error || 'No se pudo generar QR code');
+                }
+                
+            } catch (error) {
+                console.error('Error generating QR:', error);
+                
+                const btn = document.getElementById(`btn-${instanceNumber}`);
+                const qrContainer = document.getElementById(`qr-container-${instanceNumber}`);
+                
+                btn.innerHTML = '❌ Error - Reintentar';
+                btn.disabled = false;
+                qrContainer.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+            }
+        }
+        
+        // Cargar instancias al iniciar
+        loadInstances();
+        
+        // Actualizar cada 30 segundos
+        setInterval(loadInstances, 30000);
+    </script>
+</body>
+</html>

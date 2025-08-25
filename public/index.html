@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp-GHL Platform V2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .logo {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+        
+        .description {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .access-form {
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #25d366;
+        }
+        
+        .btn {
+            background: #25d366;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            background: #1ea952;
+            transform: translateY(-2px);
+        }
+        
+        .test-links {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .test-links h3 {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        
+        .test-link {
+            display: inline-block;
+            background: #f8f9fa;
+            color: #495057;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .test-link:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+        
+        .version {
+            color: #999;
+            font-size: 0.9rem;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📱</div>
+        <h1>WhatsApp-GHL Platform V2</h1>
+        
+        <div class="description">
+            <p>Conecta múltiples números de WhatsApp a tu cuenta de GoHighLevel</p>
+            <p><strong>Nueva versión desde cero - 100% funcional</strong></p>
+        </div>
+        
+        <div class="access-form">
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="locationId" 
+                    placeholder="Ingresa tu Location ID"
+                    value="TEST_CLIENT_001">
+            </div>
+            
+            <button class="btn" onclick="accessDashboard()">
+                🚀 Acceder al Dashboard
+            </button>
+        </div>
+        
+        <div class="test-links">
+            <h3>🧪 Enlaces de prueba:</h3>
+            <a href="/dashboard/TEST_CLIENT_001" class="test-link">Dashboard Test</a>
+            <a href="/health" class="test-link">Health Check</a>
+            <a href="/api/instances/TEST_CLIENT_001" class="test-link">API Test</a>
+        </div>
+        
+        <div class="version">
+            <p>V2.0.0 - Creada desde cero el 25 de agosto de 2025</p>
+            <p>🔧 Evolution API: Integración directa y funcional</p>
+        </div>
+    </div>
+
+    <script>
+        function accessDashboard() {
+            const locationId = document.getElementById('locationId').value.trim();
+            
+            if (!locationId) {
+                alert('Por favor ingresa un Location ID');
+                return;
+            }
+            
+            // Redirigir al dashboard
+            window.location.href = `/dashboard/${locationId}`;
+        }
+        
+        // Permitir acceso con Enter
+        document.getElementById('locationId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                accessDashboard();
+            }
+        });
+    </script>
+</body>
+</html>
