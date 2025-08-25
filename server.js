@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const axios = require('axios');
 require('dotenv').config();
 
@@ -38,45 +39,112 @@ const EVOLUTION_CONFIG = {
 console.log('🔧 Evolution API Config:', EVOLUTION_CONFIG);
 
 // ================================
-// BASE DE DATOS SIMPLE
+// BASE DE DATOS FLEXIBLE
 // ================================
 
-// Crear directorio database si no existe
-const databaseDir = './database';
-if (!fs.existsSync(databaseDir)) {
-    fs.mkdirSync(databaseDir, { recursive: true });
-    console.log('📁 Database directory created');
+let db;
+let isPostgreSQL = false;
+
+// Intentar conectar a PostgreSQL primero
+if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+    try {
+        const pool = new Pool({
+            connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        });
+        
+        // Test the connection
+        pool.connect().then(client => {
+            console.log('✅ PostgreSQL connected successfully');
+            client.release();
+            isPostgreSQL = true;
+            db = pool;
+            
+            // Crear tablas PostgreSQL
+            initializePostgreSQLTables();
+        }).catch(err => {
+            console.log('⚠️ PostgreSQL failed, falling back to SQLite:', err.message);
+            initializeSQLite();
+        });
+    } catch (error) {
+        console.log('⚠️ PostgreSQL config error, using SQLite:', error.message);
+        initializeSQLite();
+    }
+} else {
+    console.log('📝 No PostgreSQL config found, using SQLite');
+    initializeSQLite();
 }
 
-const db = new sqlite3.Database('./database/platform.db');
+async function initializePostgreSQLTables() {
+    try {
+        // Crear tablas PostgreSQL
+        await db.query(`CREATE TABLE IF NOT EXISTS clients (
+            id SERIAL PRIMARY KEY,
+            location_id TEXT UNIQUE,
+            company_name TEXT,
+            email TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+        
+        await db.query(`CREATE TABLE IF NOT EXISTS instances (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER REFERENCES clients(id),
+            location_id TEXT,
+            instance_name TEXT UNIQUE,
+            instance_number INTEGER,
+            status TEXT DEFAULT 'created',
+            qr_code TEXT,
+            phone_number TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+        
+        console.log('✅ PostgreSQL tables initialized');
+    } catch (error) {
+        console.error('❌ PostgreSQL table creation error:', error);
+        console.log('⚠️ Falling back to SQLite');
+        initializeSQLite();
+    }
+}
 
-// Crear tablas si no existen
-db.serialize(() => {
-    // Tabla de usuarios/clientes
-    db.run(`CREATE TABLE IF NOT EXISTS clients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        location_id TEXT UNIQUE,
-        company_name TEXT,
-        email TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    
-    // Tabla de instancias WhatsApp
-    db.run(`CREATE TABLE IF NOT EXISTS instances (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        location_id TEXT,
-        instance_name TEXT UNIQUE,
-        instance_number INTEGER,
-        status TEXT DEFAULT 'created',
-        qr_code TEXT,
-        phone_number TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (client_id) REFERENCES clients (id)
-    )`);
-    
-    console.log('✅ Database initialized');
-});
+function initializeSQLite() {
+    // Crear directorio database si no existe
+    const databaseDir = './database';
+    if (!fs.existsSync(databaseDir)) {
+        fs.mkdirSync(databaseDir, { recursive: true });
+        console.log('📁 Database directory created');
+    }
+
+    db = new sqlite3.Database('./database/platform.db');
+    isPostgreSQL = false;
+
+    // Crear tablas SQLite
+    db.serialize(() => {
+        // Tabla de usuarios/clientes
+        db.run(`CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location_id TEXT UNIQUE,
+            company_name TEXT,
+            email TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+        
+        // Tabla de instancias WhatsApp
+        db.run(`CREATE TABLE IF NOT EXISTS instances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER,
+            location_id TEXT,
+            instance_name TEXT UNIQUE,
+            instance_number INTEGER,
+            status TEXT DEFAULT 'created',
+            qr_code TEXT,
+            phone_number TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES clients (id)
+        )`);
+        
+        console.log('✅ SQLite Database initialized');
+    });
+}
 
 // ================================
 // FUNCIONES EVOLUTION API
@@ -195,6 +263,84 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Helper functions for database operations
+async function insertClient(locationId, companyName, email) {
+    if (isPostgreSQL) {
+        const query = 'INSERT INTO clients (location_id, company_name, email) VALUES ($1, $2, $3) ON CONFLICT (location_id) DO UPDATE SET company_name = $2, email = $3 RETURNING id';
+        const result = await db.query(query, [locationId, companyName, email]);
+        return result.rows[0].id;
+    } else {
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT OR REPLACE INTO clients (location_id, company_name, email) VALUES (?, ?, ?)',
+                [locationId, companyName, email],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+    }
+}
+
+async function insertInstance(clientId, locationId, instanceName, instanceNumber, status) {
+    if (isPostgreSQL) {
+        const query = 'INSERT INTO instances (client_id, location_id, instance_name, instance_number, status) VALUES ($1, $2, $3, $4, $5)';
+        await db.query(query, [clientId, locationId, instanceName, instanceNumber, status]);
+    } else {
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO instances (client_id, location_id, instance_name, instance_number, status) VALUES (?, ?, ?, ?, ?)',
+                [clientId, locationId, instanceName, instanceNumber, status],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+}
+
+async function updateInstanceQR(locationId, instanceNumber, qrCode, status) {
+    if (isPostgreSQL) {
+        await db.query(
+            'UPDATE instances SET qr_code = $1, status = $2 WHERE location_id = $3 AND instance_number = $4',
+            [qrCode, status, locationId, instanceNumber]
+        );
+    } else {
+        return new Promise((resolve, reject) => {
+            db.run(
+                'UPDATE instances SET qr_code = ?, status = ? WHERE location_id = ? AND instance_number = ?',
+                [qrCode, status, locationId, instanceNumber],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+}
+
+async function updateInstanceStatus(instanceName, status) {
+    if (isPostgreSQL) {
+        await db.query(
+            'UPDATE instances SET status = $1 WHERE instance_name = $2',
+            [status, instanceName]
+        );
+    } else {
+        return new Promise((resolve, reject) => {
+            db.run(
+                'UPDATE instances SET status = ? WHERE instance_name = ?',
+                [status, instanceName],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+}
+
 // Registrar nuevo cliente (desde GHL)
 app.post('/api/register', async (req, res) => {
     try {
@@ -203,47 +349,33 @@ app.post('/api/register', async (req, res) => {
         console.log(`🆕 Registering new client: ${locationId}`);
         
         // Insertar cliente en DB
-        db.run(
-            'INSERT OR REPLACE INTO clients (location_id, company_name, email) VALUES (?, ?, ?)',
-            [locationId, companyName, email],
-            async function(err) {
-                if (err) {
-                    console.error('❌ Database error:', err);
-                    return res.status(500).json({ error: 'Database error' });
-                }
-                
-                const clientId = this.lastID;
-                console.log(`✅ Client saved with ID: ${clientId}`);
-                
-                // Crear 5 instancias
-                const instances = [];
-                for (let i = 1; i <= 5; i++) {
-                    const instanceName = `${locationId}_wa_${i}`;
-                    
-                    // Crear en Evolution API
-                    const evolutionResult = await createEvolutionInstance(instanceName);
-                    
-                    // Guardar en DB
-                    db.run(
-                        'INSERT INTO instances (client_id, location_id, instance_name, instance_number, status) VALUES (?, ?, ?, ?, ?)',
-                        [clientId, locationId, instanceName, i, 'created']
-                    );
-                    
-                    instances.push({
-                        name: instanceName,
-                        number: i,
-                        evolutionCreated: evolutionResult.success
-                    });
-                }
-                
-                res.json({
-                    success: true,
-                    clientId,
-                    locationId,
-                    instances
-                });
-            }
-        );
+        const clientId = await insertClient(locationId, companyName, email);
+        console.log(`✅ Client saved with ID: ${clientId}`);
+        
+        // Crear 5 instancias
+        const instances = [];
+        for (let i = 1; i <= 5; i++) {
+            const instanceName = `${locationId}_wa_${i}`;
+            
+            // Crear en Evolution API
+            const evolutionResult = await createEvolutionInstance(instanceName);
+            
+            // Guardar en DB
+            await insertInstance(clientId, locationId, instanceName, i, 'created');
+            
+            instances.push({
+                name: instanceName,
+                number: i,
+                evolutionCreated: evolutionResult.success
+            });
+        }
+        
+        res.json({
+            success: true,
+            clientId,
+            locationId,
+            instances
+        });
         
     } catch (error) {
         console.error('❌ Registration error:', error);
@@ -252,19 +384,36 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Obtener instancias de un cliente
-app.get('/api/instances/:locationId', (req, res) => {
-    const { locationId } = req.params;
-    
-    db.all(
-        'SELECT * FROM instances WHERE location_id = ? ORDER BY instance_number',
-        [locationId],
-        (err, rows) => {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            res.json({ instances: rows });
+app.get('/api/instances/:locationId', async (req, res) => {
+    try {
+        const { locationId } = req.params;
+        
+        let instances;
+        if (isPostgreSQL) {
+            const result = await db.query(
+                'SELECT * FROM instances WHERE location_id = $1 ORDER BY instance_number',
+                [locationId]
+            );
+            instances = result.rows;
+        } else {
+            instances = await new Promise((resolve, reject) => {
+                db.all(
+                    'SELECT * FROM instances WHERE location_id = ? ORDER BY instance_number',
+                    [locationId],
+                    (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows);
+                    }
+                );
+            });
         }
-    );
+        
+        res.json({ instances });
+        
+    } catch (error) {
+        console.error('❌ Error getting instances:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Generar QR code para una instancia
@@ -279,10 +428,7 @@ app.post('/api/instances/:locationId/:number/qr', async (req, res) => {
         
         if (qrResult.success) {
             // Actualizar DB
-            db.run(
-                'UPDATE instances SET qr_code = ?, status = ? WHERE location_id = ? AND instance_number = ?',
-                [qrResult.qrCode, 'qr_ready', locationId, parseInt(number)]
-            );
+            await updateInstanceQR(locationId, parseInt(number), qrResult.qrCode, 'qr_ready');
             
             res.json({
                 success: true,
@@ -313,10 +459,7 @@ app.post('/webhook/evolution/:instanceName', (req, res) => {
     if (data.event === 'connection.update') {
         const status = data.data.state;
         
-        db.run(
-            'UPDATE instances SET status = ? WHERE instance_name = ?',
-            [status, instanceName]
-        );
+        await updateInstanceStatus(instanceName, status);
         
         console.log(`🔄 Instance ${instanceName} status: ${status}`);
     }
