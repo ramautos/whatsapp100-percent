@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
+const QRCode = require('qrcode');
 require('dotenv').config();
 
 const app = express();
@@ -93,12 +94,15 @@ async function getQRCode(instanceName) {
         
         console.log(`🔗 Connect response for ${instanceName}:`, response.data);
         
+        let qrString = null;
+        
         if (response.data && response.data.code) {
-            console.log(`✅ QR code obtained for: ${instanceName}`);
-            return { success: true, qrCode: response.data.code };
+            console.log(`✅ QR code string obtained for: ${instanceName}`);
+            qrString = response.data.code;
         } 
         else if (response.data && response.data.base64) {
             console.log(`✅ QR code (base64) obtained for: ${instanceName}`);
+            // Si ya viene como base64, lo devolvemos directo
             return { success: true, qrCode: response.data.base64 };
         }
         else {
@@ -119,11 +123,42 @@ async function getQRCode(instanceName) {
             
             if (statusResponse.data.instance?.qrcode?.base64) {
                 console.log(`✅ QR code from connectionState for: ${instanceName}`);
+                // Si ya viene como base64, lo devolvemos directo
                 return { success: true, qrCode: statusResponse.data.instance.qrcode.base64 };
+            } else if (statusResponse.data.instance?.qrcode?.code) {
+                qrString = statusResponse.data.instance.qrcode.code;
             } else {
                 throw new Error('No QR code found in response or connectionState');
             }
         }
+        
+        // Si tenemos un string QR, lo convertimos a imagen base64
+        if (qrString) {
+            console.log(`🎨 Converting QR string to base64 image for: ${instanceName}`);
+            try {
+                // Generar QR code como Data URL base64
+                const qrBase64 = await QRCode.toDataURL(qrString, {
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                });
+                
+                // Remover el prefijo 'data:image/png;base64,' para devolver solo el base64
+                const base64Only = qrBase64.replace(/^data:image\/png;base64,/, '');
+                
+                console.log(`✅ QR code converted to base64 for: ${instanceName}`);
+                return { success: true, qrCode: base64Only };
+            } catch (qrError) {
+                console.error(`❌ Error converting QR to image:`, qrError);
+                // Si falla la conversión, devolvemos el string original
+                return { success: true, qrCode: qrString };
+            }
+        }
+        
+        throw new Error('No QR code found');
         
     } catch (error) {
         console.error(`❌ Error getting QR for ${instanceName}:`, error.response?.data || error.message);
